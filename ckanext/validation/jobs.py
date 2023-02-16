@@ -14,6 +14,10 @@ import ckan.lib.uploader as uploader
 
 import ckantoolkit as t
 
+from ckan.plugins import toolkit, core
+from ckan.common import g
+from ckan.lib.helpers import _get_auto_flask_context
+
 from ckanext.validation.model import Validation
 from ckanext.validation.utils import get_update_mode_from_config
 
@@ -56,23 +60,36 @@ def run_validation_job(resource):
 
     source = None
     if resource.get('url_type') == 'upload':
-        upload = uploader.get_resource_uploader(resource)
-        if isinstance(upload, uploader.ResourceUpload):
-            source = upload.get_path(resource['id'])
+        if core.plugin_loaded('blob_storage'):
+            app_context = _get_auto_flask_context()
+            if app_context:
+                with app_context:
+                    g.user = t.get_action('get_site_user')({'ignore_auth': True})['name']
+                    source = toolkit.get_action('get_resource_download_spec')(
+                        {'ignore_auth': True}, {'id': resource['id']}
+                    ).get('href')
+            else:
+                source = toolkit.get_action('get_resource_download_spec')(
+                    {'ignore_auth': True}, {'id': resource['id']}
+                ).get('href')
         else:
-            # Upload is not the default implementation (ie it's a cloud storage
-            # implementation)
-            pass_auth_header = t.asbool(
-                t.config.get('ckanext.validation.pass_auth_header', True))
-            if dataset['private'] and pass_auth_header:
-                s = requests.Session()
-                s.headers.update({
-                    'Authorization': t.config.get(
-                        'ckanext.validation.pass_auth_header_value',
-                        _get_site_user_api_key())
-                })
+            upload = uploader.get_resource_uploader(resource)
+            if isinstance(upload, uploader.ResourceUpload):
+                source = upload.get_path(resource['id'])
+            else:
+                # Upload is not the default implementation (ie it's a cloud storage
+                # implementation)
+                pass_auth_header = t.asbool(
+                    t.config.get('ckanext.validation.pass_auth_header', True))
+                if dataset['private'] and pass_auth_header:
+                    s = requests.Session()
+                    s.headers.update({
+                        'Authorization': t.config.get(
+                            'ckanext.validation.pass_auth_header_value',
+                            _get_site_user_api_key())
+                    })
 
-                options['http_session'] = s
+                    options['http_session'] = s
 
     if not source:
         source = resource['url']
