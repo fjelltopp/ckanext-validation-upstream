@@ -661,6 +661,13 @@ def _run_sync_validation(resource_id, local_upload=False, new_resource=True):
 
     if validation['report']:
         report = json.loads(validation['report'])
+    # Check upload of invalid data is allowed
+    allow_invalid_data = bool(t.config.get(
+        'ckanext.validation.allow_invalid_data'
+    ))
+
+    if not report['valid'] and not allow_invalid_data:
+
 
         if not report['valid']:
 
@@ -683,7 +690,7 @@ def _run_sync_validation(resource_id, local_upload=False, new_resource=True):
 
             raise t.ValidationError({
                 u'validation': [report]})
-    else:
-        raise t.ValidationError({
-            'validation': []
-        })
+        else:
+            raise t.ValidationError({
+                'validation': []
+            })
